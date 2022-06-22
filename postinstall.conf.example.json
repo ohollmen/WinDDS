@@ -1,0 +1,64 @@
+{
+  "dlpath": "C:\\winsetup\\",
+  "workdir": "C:\\winsetup\\",
+  "htauth": {
+    "user": "mrsmith",
+    "pass": "VrY53CrT"
+  },
+  "urls": [
+    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/vc_redist.x64.exe",
+       "proc":".\\VC_redist.x64.exe", "args": ["install", "/quiet", "/norestart",  "/log vc_log.txt"], "auth": true },
+    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/Win64OpenSSL_Light-1_1_1o.exe",
+      "proc": ".\\Win64OpenSSL_Light-1_1_1o.exe", "args":["/SP-", "/SILENT", "/SAVEINF", "openssl_log.txt"], "auth": true },
+    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/LGPO.exe", "proc":"", "auth": true},
+    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/aggregator.crt", "proc":"", "auth": true},
+    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/aggregator.key", "proc":"", "auth": true},
+    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/datapkg-2020-02.zip", "proc":"", "auth": true},
+    
+    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/channels.reg", "proc":"", "auth": true},
+    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/fips.reg", "proc":"", "auth": true},
+    {"url": "", "proc":""}
+  ],
+  "regchanges": ["c:\\winsetup\\channels.reg","c:\\winsetup\\fips.reg"],
+  "tls_disa": ["curve25519"],
+  "servs": {
+    "disa": [
+      "Audiosrv",
+      "Browser",
+      "bthserv",
+      "CscService",
+      "NetTcpPortSharing",
+      "RemoteAccess",
+      "XblGameSave",
+      "SSDPSRV",
+      "SharedAccess",
+      "UevAgentService",
+      "upnphost",
+      "XblAuthManager"
+    ],
+    "ena": []
+  },
+  "users": [
+    {"uname": "orgadmin", "pass":"-as9fu53!",    "desc": "Org Admin User"},
+    {"uname": "devops",   "pass":"123854mg.sd", "desc": "DevOps User"}
+  ],
+  "reginfo": {
+    "FilePath": "REG.exe",
+    "ArgumentList": ["import", "C:\\file.reg"],
+    "Verb"    : "RunAs",
+    "PassThru": true,
+    "Wait"    : true
+  },
+  "unzip": [
+    {"src": "c:\\winsetup\\datapkg-2020-02.zip", "dest": "c:\\winsetup\\"}
+  ],
+  "run": [
+    {"cmd": "C:\\Program Files\\OpenSSL-Win64\\bin\\openssl.exe",
+     "args": ["pkcs12", "-export", "-out", "aggregator.pfx",  "-inkey", "aggregator.key", "-in", "aggregator.crt", "-passout", "pass:"] },
+    {"cmd": ".\\LGPO.exe", "args": ["/g", "C:\\winsetup\\datapkg-2020-02"] },
+    {"cmd": "Remove-Item", "args": ["-LiteralPath", "'C:\\winsetup\\datapkg-2020-02'", "-Recurse", "-Force"], "disa": false, "ps": true},
+    {"cmd": "Remove-Item", "args": ["-LiteralPath", "'C:\\winsetup\\aggregator.pfx'", "-Recurse", "-Force"], "disa": false, "ps": true},
+    {"cmd": "rmdir", "args": [ "C:\\winsetup\\datapkg-2020-02", "/s", "/q"], "disa": true},
+    {"cmd": "echo", "args": ["Launch 'mmc' to import (earlier generated) PFX"] }
+  ]
+}
