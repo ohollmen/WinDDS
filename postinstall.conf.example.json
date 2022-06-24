@@ -6,17 +6,17 @@
     "pass": "VrY53CrT"
   },
   "urls": [
-    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/vc_redist.x64.exe",
+    {"url": "https://apache.mycorp.com/winsetup42/vc_redist.x64.exe",
        "proc":".\\VC_redist.x64.exe", "args": ["install", "/quiet", "/norestart",  "/log vc_log.txt"], "auth": true },
-    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/Win64OpenSSL_Light-1_1_1o.exe",
+    {"url": "https://apache.mycorp.com/winsetup42/Win64OpenSSL_Light-1_1_1o.exe",
       "proc": ".\\Win64OpenSSL_Light-1_1_1o.exe", "args":["/SP-", "/SILENT", "/SAVEINF", "openssl_log.txt"], "auth": true },
-    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/LGPO.exe", "proc":"", "auth": true},
-    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/aggregator.crt", "proc":"", "auth": true},
-    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/aggregator.key", "proc":"", "auth": true},
-    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/datapkg-2020-02.zip", "proc":"", "auth": true},
+    {"url": "https://apache.mycorp.com/winsetup42/LGPO.exe", "proc":"", "auth": true},
+    {"url": "https://apache.mycorp.com/winsetup42/aggregator.crt", "proc":"", "auth": true},
+    {"url": "https://apache.mycorp.com/winsetup42/aggregator.key", "proc":"", "auth": true},
+    {"url": "https://apache.mycorp.com/winsetup42/datapkg-2020-02.zip", "proc":"", "auth": true},
     
-    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/channels.reg", "proc":"", "auth": true},
-    {"url": "https://artifactory.mycorp.com/artifactory/winsetup42/fips.reg", "proc":"", "auth": true},
+    {"url": "https://apache.mycorp.com/winsetup42/channels.reg", "proc":"", "auth": true},
+    {"url": "https://apache.mycorp.com/winsetup42/fips.reg", "proc":"", "auth": true},
     {"url": "", "proc":""}
   ],
   "regchanges": ["c:\\winsetup\\channels.reg","c:\\winsetup\\fips.reg"],

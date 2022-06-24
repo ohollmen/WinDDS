@@ -1,7 +1,14 @@
-$cfgfn = ""
+# $cfgfn = ""
+$cfgfn = $args[0]
+
 if ($Env:WINSETUP_CFG_NAME) { $cfgfn = $Env:WINSETUP_CFG_NAME }
-else { Write-Output "Must have Setup Filename in `$Env:WINSETUP_CFG_NAME = `"...`""; Exit }
-if (-not(Test-Path -Path $cfgfn -PathType Leaf)) { Write-Output "Config File does not exist"; Exit }
+# else { Write-Output "Must have Setup Filename in `$Env:WINSETUP_CFG_NAME = `"...`""; Exit }
+if (-not(Test-Path -Path $cfgfn -PathType Leaf)) {
+  Write-Output "Config File $cfgfn does not exist."
+  Write-Output "Give config name in `$Env:WINSETUP_CFG_NAME or give it as first argument on command line."
+  Exit
+}
+Write-Output "Using Config: $cfgfn"
 $cfg = Get-Content $cfgfn | ConvertFrom-Json
 if (!$cfg) { WINSETUP_CFG_NAME "Config (JSON) Not loaded"; Exit }
 function serv_set {
