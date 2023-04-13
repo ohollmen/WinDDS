@@ -1,6 +1,7 @@
 # $cfgfn = ""
 $cfgfn = $args[0]
-
+# Init reg-change params
+$reg_change_tmpl = @{ "FilePath" = "REG.exe"; "ArgumentList" = @("import", "C:\\file.reg"); "Verb" = "RunAs"; "PassThru" = $true; "Wait" = $true }
 if ($Env:WINSETUP_CFG_NAME) { $cfgfn = $Env:WINSETUP_CFG_NAME }
 # else { Write-Output "Must have Setup Filename in `$Env:WINSETUP_CFG_NAME = `"...`""; Exit }
 if (-not(Test-Path -Path $cfgfn -PathType Leaf)) {
@@ -35,7 +36,8 @@ function serv_set {
 
 
 function reg_mod {
-  $myht = $cfg.reginfo | ConvertTo-Json | ConvertFrom-Json -AsHashTable
+  # $myht = $cfg.reginfo | ConvertTo-Json | ConvertFrom-Json -AsHashTable
+  $myht = $reg_change_tmpl
   $regfiles = $cfg.regchanges
   Write-Output $regfiles
   foreach ($rf in $regfiles) {
@@ -138,6 +140,11 @@ function ops_run {
     Write-Output "RC=$LASTEXITCODE"
   }
 }
+
+# Run the default operational sequence. This is someting that probably works
+# 90(+)% of the time, but you may need to establish a sequence of your own
+# (reorder/skip some). TODO: Make running this optional to use winsetup.p1 as
+# library (not only main executable).
 $cwd_orig = Get-location
 if ($cfg.workdir) { Set-Location $cfg.workdir }
 serv_set
@@ -148,6 +155,7 @@ http_dnload
 reg_mod
 pkgs_unzip
 ops_run
-http_cleanup
+# Do not cleanup by default.
+# http_cleanup
 Set-Location $cwd_orig
 Exit

@@ -119,3 +119,8 @@ If needed, customize the operations sequence at the bottom of the script to fit
 your use-case. On the other hand to disable/skip certain operation it is usually
 enough to leave respecive JSON config empty (e.g. empty array), which
 means no operations are run for that section.
+
+## TODO
+- Make usable as library
+- Add "does not exist" guards on each operation handler (to not have even arrays for ops)
+- Research/learn/use a good (built-in) CL arg parsing toolkit to parametrize launching from CL and provide more options / flexibility
