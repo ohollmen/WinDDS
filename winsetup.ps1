@@ -36,6 +36,7 @@ function serv_set {
 
 
 function reg_mod {
+  if (!$cfg.regchanges) { Write-Output "Skipping regchanges ..."; return }
   # $myht = $cfg.reginfo | ConvertTo-Json | ConvertFrom-Json -AsHashTable
   $myht = $reg_change_tmpl
   $regfiles = $cfg.regchanges
@@ -50,6 +51,7 @@ function reg_mod {
 }
 
 function user_setup {
+  if (!$cfg.users) { Write-Output "Skipping users addition ..."; return }
   foreach ($u in $cfg.users) {
     $uent =  Get-LocalUser -Name $u.uname
     if ($uent) { Write-Output "User $u.uname already exists"; continue }
@@ -60,6 +62,7 @@ function user_setup {
 }
 
 function tls_ciph_mod {
+  if (!$cfg.tls_disa) { Write-Output "Skipping TLS cipher disablement ..."; return }
   foreach ($cipher in $cfg.tls_disa) {
     Disable-TlsEccCurve -Name $cipher
   }
@@ -74,6 +77,7 @@ function http_auth {
 }
 
 function http_dnload {
+  if (!$cfg.urls) { Write-Output "Skipping URL downloads ..."; return }
   $dlpath = $cfg.dlpath
   foreach ($uitem in $cfg.urls) {
     if ( ! $uitem.url) { Write-Output "No URL (skip)"; continue; }
@@ -103,6 +107,7 @@ function http_dnload {
   }
 }
 function http_cleanup {
+  if (!$cfg.cleanup) { Write-Output "Skipping download cleanup ..."; return }
   $dlpath = $cfg.dlpath
   foreach ($uitem in $cfg.urls) {
     if ( ! $uitem.url) { Write-Output "No URL in item for cleanup (skip)"; continue; }
@@ -120,6 +125,7 @@ function debug_ctx {
 }
 
 function pkgs_unzip {
+  if (!$cfg.unzip) { Write-Output "Skipping UNZIP:ping ..."; return }
   foreach ($pkg in $cfg.unzip) {
     Write-Output "Unpacking $($pkg.src) to $($pkg.dest)"
     Expand-Archive -LiteralPath $pkg.src -DestinationPath $pkg.dest
@@ -140,6 +146,60 @@ function ops_run {
     Write-Output "RC=$LASTEXITCODE"
   }
 }
+function sys_unhide {
+  if (!$cfg.unhide) { Write-Output "Skipping unhide ..."; return }
+  $exp_adv_key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+  Set-ItemProperty $exp_adv_key Hidden 1
+  Set-ItemProperty $exp_adv_key HideFileExt 0
+  Set-ItemProperty $exp_adv_key ShowSuperHidden 1
+  # Avoid disruption, alow take effect after next reboot
+  # Stop-Process -processname explorer
+}
+# WIP: Import and/or associate cert with service
+# path (e.g.): RDP: /namespace:\\root\\cimv2\\TerminalServices, 
+function cert_setup {
+  if (!$cfg.certs) { Write-Output "Skipping certs setup ..."; return }
+  foreach ($c in $cfg.certs) {
+    # Check need to import
+    if ($c.pfxfn && $c.csl) { Import-PfxCertificate -FilePath $c.pfxfn -CertStoreLocation $c.csl }
+    # Check need to associate (wmic)
+    if ($c.thumbprint) { }
+  }
+}
+function gp_apply {
+  if (!$cfg.gp) { Write-Output "No LGP config - Skipping Group Policy setup/import ..."; return }
+  $exe = $cfg.gp.lgpoexe # || 'lgpo.exe'
+  if (!$exe) { Write-Output "Must have LGPO executable configured (missing). Skipping LGP import"; return }
+  $bdir = $cfg.gp.basedir
+  if (!$bdir) { Write-Output "No basedir for LGP import. Skipping LGP import"; return }
+  # Remove old policies before applying new
+  if ($cfg.gp.rmpol) {
+    Remove-Item -LiteralPath C:\Windows\System32\GroupPolicy -Recurse -Force
+    Remove-Item -LiteralPath C:\Windows\System32\GroupPolicyUsers -Recurse -Force
+  }
+  & gpupdate.exe /force
+  $items = @(
+    #[pscustomobject]
+    @{impopt='/s';relfn='\DomainSysvol\GPO\Machine\microsoft\windows nt\SecEdit\GptTmpl.inf'}
+    #[pscustomobject]
+    @{impopt='/ac';relfn='\DomainSysvol\GPO\Machine\microsoft\windows nt\Audit\audit.csv'}
+    #[pscustomobject]
+    @{impopt='/m';relfn='\DomainSysvol\GPO\Machine\registry.pol'}
+    #[pscustomobject]
+    @{impopt='/u';relfn='\DomainSysvol\GPO\User\registry.pol'}
+  )
+  foreach ($it in $items) {
+    # $cfg.gp.lgpoexe + " " +
+    #$para =  $it.impopt + " " + "$bdir" + $it.relfn
+    #$fpath = "'"+$bdir+$it.relfn+"'"
+    $fpath = $bdir+$it.relfn
+    #$para = @($it.impopt, "'"+$bdir+$it.relfn+"'")
+    $para = @($it.impopt, $fpath)
+    #Write-Output $cmd
+    & $exe $para
+  }
+  & gpupdate.exe /force
+}
 
 # Run the default operational sequence. This is someting that probably works
 # 90(+)% of the time, but you may need to establish a sequence of your own
@@ -157,5 +217,7 @@ pkgs_unzip
 ops_run
 # Do not cleanup by default.
 # http_cleanup
+sys_unhide
+gp_apply
 Set-Location $cwd_orig
 Exit
