@@ -1,4 +1,22 @@
-# $cfgfn = ""
+# ## winsetup.ps1 - WinDDS
+# 
+# WinDDS (Windows Data driven Setup) is a Windows setup / configuration / automation tool
+# with focus on low dependencies and self-containment.
+# WinDDS aims to be a poor-mans Ansible on Windows with no extra dependencies needed on any Windows PS 7 equipped OS / host.
+# 
+# URLs for
+# - Git Repo: https://github.com/ohollmen/WinDDS
+# - This PS executable: https://raw.githubusercontent.com/ohollmen/WinDDS/main/winsetup.ps1
+# - Brief manual page: https://github.com/ohollmen/WinDDS/blob/main/README.md
+# 
+# Low dependencies - Depends only on Powershell 7 (Some features are
+# powershell 5 incompatible, please make sure you are using PS version 7).
+# For features see Git repo README.md.
+# Usage (assume JSON config mysetup.json to reside in same directory as winsetup.ps1):
+# ```
+# .\winsetup.ps1 .\mysetup.json
+# ```
+
 $cfgfn = $args[0]
 # Init reg-change params
 $reg_change_tmpl = @{ "FilePath" = "REG.exe"; "ArgumentList" = @("import", "C:\\file.reg"); "Verb" = "RunAs"; "PassThru" = $true; "Wait" = $true }
@@ -11,8 +29,10 @@ if (-not(Test-Path -Path $cfgfn -PathType Leaf)) {
 }
 Write-Output "Using Config: $cfgfn"
 $cfg = Get-Content $cfgfn | ConvertFrom-Json
-if (!$cfg) { WINSETUP_CFG_NAME "Config (JSON) Not loaded"; Exit }
+if (!$cfg) { Write-Output "Setup Config '$cfgfn' (JSON) Not loaded"; Exit }
 function serv_set {
+  #if (!$cfg.servs) { $cfg.servs = @{} }
+  if (!$cfg.servs) { Write-Output "No services to enable / disable"; return; }
   if (!$cfg.servs.disa -or !$cfg.servs.disa.Length) {
     Write-Output "No services to disable";
     $cfg.servs.disa = @()
@@ -80,9 +100,11 @@ function http_dnload {
   if (!$cfg.urls) { Write-Output "Skipping URL downloads ..."; return }
   $dlpath = $cfg.dlpath
   foreach ($uitem in $cfg.urls) {
+    if ($uitem.disa) { continue; }
     if ( ! $uitem.url) { Write-Output "No URL (skip)"; continue; }
     # $bn = (Get-Item $uitem.url ).Name
-    $bn = Split-Path $uitem.url -Leaf
+    if ($uitem.saveas) { $bn = $uitem.saveas }
+    else { $bn = Split-Path $uitem.url -Leaf }
     $itempath = $dlpath+"\"+ $bn
     Write-Output "Save as: $itempath (Orig: $($uitem.url) )"
     # continue
@@ -110,6 +132,7 @@ function http_cleanup {
   if (!$cfg.cleanup) { Write-Output "Skipping download cleanup ..."; return }
   $dlpath = $cfg.dlpath
   foreach ($uitem in $cfg.urls) {
+    if ($uitem.disa) { continue; }
     if ( ! $uitem.url) { Write-Output "No URL in item for cleanup (skip)"; continue; }
     $bn = Split-Path $uitem.url -Leaf
     $itempath = $dlpath+"\"+ $bn
@@ -125,8 +148,9 @@ function debug_ctx {
 }
 
 function pkgs_unzip {
-  if (!$cfg.unzip) { Write-Output "Skipping UNZIP:ping ..."; return }
+  if (!$cfg.unzip) { Write-Output "Skipping UNZIP ..."; return }
   foreach ($pkg in $cfg.unzip) {
+    if ($pkg.disa) { continue; }
     Write-Output "Unpacking $($pkg.src) to $($pkg.dest)"
     Expand-Archive -LiteralPath $pkg.src -DestinationPath $pkg.dest
   }

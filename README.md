@@ -64,12 +64,16 @@ the setup).
 unzip "dest" directory works as you expected
 - **run** - Set of setup commands or Powershell functions to run (array of operation objects):
   - **cmd** - Command executable to run (w. basename or absolute path,
-NOT inclusing args ! For "args" see below) or name of Powershell function
+NOT including args ! For "args" see below) or name of Powershell function
 to call (There will never be Path part to this)
   - **args** - Array of arguments to pass to command executable
   - **disa** - Disable this command (e.g. temporarily, keep as example, etc.)
   - **ps** - Flag for command being a Powershell command/function call (+args), not an system level executable call
-  
+- **gp** - Apply Group Policy from a directory tree using LGPO.exe utility
+  - **lgpoexe** - The full path (including filename) of LGPO.exe group policy utility
+  - **basedir** - The path of group policies directory (typically GUID form strings with surrounding "curlies")
+  - **rmpol** - Flag for removing all policies from global policy directorries before applying new policies from "basedir".
+
 ## Starting Setup
 
 ### Downloading Script and Config
@@ -83,6 +87,9 @@ The first step is to get the `winsetup.ps1` and setup config (JSON) to your wind
 Example of Downloading script with Powershell:
 
 ```
+# Directly from GitHub
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ohollmen/WinDDS/main/winsetup.ps1" -OutFile "winsetup.ps1"
+# From your local (e.g. intranet) webserver
 Invoke-WebRequest -Uri "https://myserv.corp.com/scripts/winsetup.ps1" -OutFile "winsetup.ps1"
 ```
 
@@ -117,8 +124,32 @@ the current solution is good though).
 
 If needed, customize the operations sequence at the bottom of the script to fit
 your use-case. On the other hand to disable/skip certain operation it is usually
-enough to leave respecive JSON config empty (e.g. empty array), which
+enough to leave respective JSON config empty (e.g. empty array), which
 means no operations are run for that section.
+
+### Creating a "Setup Bundle"
+
+To make your automation runnable "modularly", it pays off to place your setup configs in multiple JSON files as opposed to single monolithic file.
+This way ou can run a "single aspect" of your setup automation in isolation ("modularly"). You could alternatively create a monolitic wrapper (PS) script
+to "run" all JSON files in "single shot".
+
+"Setup Bundles" are a way to package your complete automation which often consists of:
+- Registry "patch" files (*.reg)
+- Group Policies exported (by "LGPO.exe", from a proto-type machine) that are importable (Either directory tree or dir tree packaged into a ZIP file) by winsetup "gp" (group policy) task type
+- The winsetup JSON setup files (typically more than one)
+- Misc executable binaries (*.exe) needed to carry out tasks within setup automation
+- Misc other files (text, scripts, config files, ...)
+
+Suggestions / ways to create "Setup Bundles":
+- Zip-up Exported Policies directory tree into a ZIP files (which will then be zipped into an outer Zip file - a Zip within a Zip) to keep the number of files down
+  - During setup the Zip can be unzipped on-the-fly (as part of setup)
+- Create a manifest (e.g. manifest.txt) file listing all the files (as relative filenames or glob patterns)
+- It is a good idea to to create the bundle on Linux or MacOS computer as these OSs have superior tools (such as make, zip, unzip, xargs) for automating the "Setup Bundle" zip creation
+  (You should probably should use make+Makefile for this)
+- Document your bundle by explaining the
+  - Unzipping of the bundle
+  - way to run the single or multiple commands to run various automations contained in a bundle.
+- Test the bundle (following the documentation) before making it available to users.
 
 ## TODO
 - Make usable as library
