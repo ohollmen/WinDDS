@@ -151,6 +151,11 @@ Suggestions / ways to create "Setup Bundles":
   - way to run the single or multiple commands to run various automations contained in a bundle.
 - Test the bundle (following the documentation) before making it available to users.
 
+Example of Unizipping a Setup Bundle with Powershell (Not external tools like 7-Zip needed !):
+```
+Expand-Archive -LiteralPath .\myautomation.2023-08.zip -DestinationPath .
+```
+
 ## TODO
 - Make usable as library
 - Add "does not exist" guards on each operation handler (to not have even arrays for ops)
