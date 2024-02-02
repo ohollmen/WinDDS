@@ -180,14 +180,52 @@ function sys_unhide {
   # Stop-Process -processname explorer
 }
 # WIP: Import and/or associate cert with service
-# path (e.g.): RDP: /namespace:\\root\\cimv2\\TerminalServices, 
+# - pfxfn - for -FilePath
+# - csl - CertStoreLocation for import-op ( typical: 'Cert:\LocalMachine\My' )
+# - pass - password of PFX Private key
+# - tp - Expected SHA1 hash thumbprint of PFX certificate (for verification)
+# - rdp - Associate cert with RDP service
+# path (e.g.): RDP: /namespace:\\root\\cimv2\\TerminalServices,
 function cert_setup {
   if (!$cfg.certs) { Write-Output "Skipping certs setup ..."; return }
+  $wmic_tmpl = @{ "FilePath" = "wmic.exe"; "ArgumentList" = @("/namespace:\\root\cimv2\TerminalServices", "PATH", "Win32_TSGeneralSetting", "Set", "");
+    "Verb" = "RunAs"; "PassThru" = $true; "Wait" = $true }
   foreach ($c in $cfg.certs) {
+    $cert = $null
+    $tp = $null
     # Check need to import
-    if ($c.pfxfn && $c.csl) { Import-PfxCertificate -FilePath $c.pfxfn -CertStoreLocation $c.csl }
+    if ($c.pfxfn -and $c.csl) {
+      Write-Output "pfxfn: $($c.pfxfn), pass: $($c.pass), $($c.csl)"
+      if ($c.pass) { $cert = Import-PfxCertificate -FilePath $c.pfxfn -Password (ConvertTo-SecureString -String $c.pass -AsPlainText -Force) -CertStoreLocation $c.csl }
+      else { $cert = Import-PfxCertificate -FilePath $c.pfxfn -CertStoreLocation $c.csl }
+      $tp = $cert.Thumbprint
+      # Check/Verify against 
+      if ($c.tp -and ($c.tp -ne $tp)) { Write-Output "Expected cert thumbprint $($c.tp) does not match discovered value $($tp)"; continue }
+    }
     # Check need to associate (wmic)
-    if ($c.thumbprint) { }
+    #if ($cfg.rdp) {
+    $wmic_tmpl.ArgumentList[4] = "SSLCertificateSHA1Hash='$tp'"
+    # Effectively: wmic /namespace:\\root\cimv2\TerminalServices PATH Win32_TSGeneralSetting Set SSLCertificateSHA1Hash="$tp"
+    $proc = Start-Process @wmic_tmpl
+    if ($proc.ExitCode -eq 0) { Write-Output "Success Associating cert with Thumbprint $tp to RDP Service" }
+    else { Write-Output "Fail! Exit code: $($Proc.ExitCode)" }
+    # }
+    # WinRM Service
+    # https://stackoverflow.com/questions/74178953/winrm-configuration-on-https-port
+    # The PS 5 (?) address "winrm/config/Listener" causes problems
+    if ($cfg.winrm) {
+    $selset = @{ Address = "*"; Transport = "HTTPS";}
+    $valset = @{CertificateThumbprint = "$thumbprint";}
+    # Need(?)
+    Get-ChildItem -Path WSMan:\localhost\Listener | Where-Object { $_.Keys -contains "Transport=HTTPS" } | Remove-Item -Recurse -Force
+    # Listener* ?
+    # Remove-Item -Path WSMan:\localhost\Listener -Recurse -Force
+    # Need try{..} catch{..} ?
+    New-WSManInstance -ResourceURI "winrm/config/Listener" -SelectorSet $selset -ValueSet $valset
+    Get-ChildItem -Path WSMan:\localhost\Listener | Where-Object { $_.Keys -contains "Transport=HTTPS" }
+    # This might terminate remote runner like ansible (!)
+    Write-Output "Please run 'Restart-Service WinRM' (and optional Start-Sleep -s 25) to make new WinRM Cert effective"
+    }
   }
 }
 function gp_apply {
@@ -243,5 +281,6 @@ ops_run
 # http_cleanup
 sys_unhide
 gp_apply
+cert_setup
 Set-Location $cwd_orig
 Exit
