@@ -74,9 +74,9 @@ function user_setup {
   if (!$cfg.users) { Write-Output "Skipping users addition ..."; return }
   foreach ($u in $cfg.users) {
     $uent =  Get-LocalUser -Name $u.uname
-    if ($uent) { Write-Output "User $u.uname already exists"; continue }
-    Write-Output "Should create User $u.uname !"
-    $password = ConvertTo-SecureString "$u.pass" -AsPlainText -Force
+    if ($uent) { Write-Output "User $($u.uname) already exists"; continue }
+    Write-Output "Should create User $($u.uname) !"
+    $password = ConvertTo-SecureString $u.pass -AsPlainText -Force
     New-LocalUser -Name $u.uname -Password $password -FullName $u.desc -Description $u.desc -AccountNeverExpires -PasswordNeverExpires
   }
 }
@@ -270,7 +270,7 @@ function gp_apply {
 $cwd_orig = Get-location
 if ($cfg.workdir) { Set-Location $cfg.workdir }
 serv_set
-# user_setup
+user_setup
 tls_ciph_mod
 # debug_ctx
 http_dnload
