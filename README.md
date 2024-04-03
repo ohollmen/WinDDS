@@ -55,6 +55,7 @@ the setup).
   - **uname** - Username for Local Windows account
   - **pass** - Password for Local Windows account
   - **desc** - Description for account
+  - **group** - Add user to an additional group
 - **reginfo** - Meta information for powershell command to apply registry changes
   (just keep this unaltered / as-is)
 - **unzip** - List of files (Array of file items) to unzip:
@@ -73,12 +74,19 @@ to call (There will never be Path part to this)
   - **lgpoexe** - The full path (including filename) of LGPO.exe group policy utility
   - **basedir** - The path of group policies directory (typically GUID form strings with surrounding "curlies")
   - **rmpol** - Flag for removing all policies from global policy directorries before applying new policies from "basedir".
-
+- **certs** - Install certificate(s) to Windows central certificate store
+  - **pfxfn** - The filename of PFX certificate (for -FilePath)
+  - **csl** - CertStoreLocation for import-op ( typical: 'Cert:\LocalMachine\My' )
+  - **pass** - password of PFX Private key
+  - **tp** - Expected SHA1 hash thumbprint of PFX certificate (for verification)
+  - **rdp** - Associate cert with RDP service
+  - **winrm** - Associate cert with WinRM service
+ 
 ## Starting Setup
 
 ### Downloading Script and Config
 
-The first step is to get the `winsetup.ps1` and setup config (JSON) to your windows box. The files could originate from (e.g):
+The first step is to get the `winsetup.ps1` and setup config (JSON) to your windows box. The file could originate from (e.g):
 
 - Git - in case your Windows box already has Git Installed
 - Windows network drive (if your box already has network drives mounted)
@@ -99,7 +107,7 @@ Example of Downloading script with curl (must have CURL installed):
 curl -u "myusername:secret" -L "https://myserv.corp.com/scripts/winsetup.ps1" -O
 ```
 
-Download JSON config in similar manner.
+Download JSON config(s) in similar manner.
 
 
 ### Setup Env variable for Config name and Run
@@ -129,7 +137,7 @@ means no operations are run for that section.
 
 ### Creating a "Setup Bundle"
 
-To make your automation runnable "modularly", it pays off to place your setup configs in multiple JSON files as opposed to single monolithic file.
+To make your automation runnable "modularly", it pays off to place your setup configs in multiple JSON files as opposed to single monolithic (JSON) file.
 This way ou can run a "single aspect" of your setup automation in isolation ("modularly"). You could alternatively create a monolitic wrapper (PS) script
 to "run" all JSON files in "single shot".
 

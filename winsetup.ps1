@@ -1,7 +1,7 @@
 # ## winsetup.ps1 - WinDDS
 # 
 # WinDDS (Windows Data driven Setup) is a Windows setup / configuration / automation tool
-# with focus on low dependencies and self-containment.
+# with focus on low dependencies and self-containment. It uses Powershell (version 7) to carry out routine tasks in Windows.
 # WinDDS aims to be a poor-mans Ansible on Windows with no extra dependencies needed on any Windows PS 7 equipped OS / host.
 # 
 # URLs for
@@ -78,6 +78,7 @@ function user_setup {
     Write-Output "Should create User $($u.uname) !"
     $password = ConvertTo-SecureString $u.pass -AsPlainText -Force
     New-LocalUser -Name $u.uname -Password $password -FullName $u.desc -Description $u.desc -AccountNeverExpires -PasswordNeverExpires
+    if ($u.group) { Add-LocalGroupMember -Group $u.group -Member $u.uname }
   }
 }
 
@@ -179,16 +180,19 @@ function sys_unhide {
   # Avoid disruption, alow take effect after next reboot
   # Stop-Process -processname explorer
 }
-# WIP: Import and/or associate cert with service
+# Import and/or associate cert with services (RDP, WinRM)
 # - pfxfn - for -FilePath
 # - csl - CertStoreLocation for import-op ( typical: 'Cert:\LocalMachine\My' )
 # - pass - password of PFX Private key
 # - tp - Expected SHA1 hash thumbprint of PFX certificate (for verification)
 # - rdp - Associate cert with RDP service
+# - winrm - Associate cert with WinRM service
 # path (e.g.): RDP: /namespace:\\root\\cimv2\\TerminalServices,
 function cert_setup {
   if (!$cfg.certs) { Write-Output "Skipping certs setup ..."; return }
   $wmic_tmpl = @{ "FilePath" = "wmic.exe"; "ArgumentList" = @("/namespace:\\root\cimv2\TerminalServices", "PATH", "Win32_TSGeneralSetting", "Set", "");
+    "Verb" = "RunAs"; "PassThru" = $true; "Wait" = $true }
+  $winrm_tmpl = @{ "FilePath" = "winrm"; "ArgumentList" = @("create", "winrm/config/Listener?Address=*+Transport=HTTPS", "@{CertificateThumbprint=''}");
     "Verb" = "RunAs"; "PassThru" = $true; "Wait" = $true }
   foreach ($c in $cfg.certs) {
     $cert = $null
@@ -203,28 +207,39 @@ function cert_setup {
       if ($c.tp -and ($c.tp -ne $tp)) { Write-Output "Expected cert thumbprint $($c.tp) does not match discovered value $($tp)"; continue }
     }
     # Check need to associate (wmic)
-    #if ($cfg.rdp) {
-    $wmic_tmpl.ArgumentList[4] = "SSLCertificateSHA1Hash='$tp'"
-    # Effectively: wmic /namespace:\\root\cimv2\TerminalServices PATH Win32_TSGeneralSetting Set SSLCertificateSHA1Hash="$tp"
-    $proc = Start-Process @wmic_tmpl
-    if ($proc.ExitCode -eq 0) { Write-Output "Success Associating cert with Thumbprint $tp to RDP Service" }
-    else { Write-Output "Fail! Exit code: $($Proc.ExitCode)" }
-    # }
+    if ($c.rdp) {
+      $wmic_tmpl.ArgumentList[4] = "SSLCertificateSHA1Hash='$tp'"
+      # Effectively: wmic /namespace:\\root\cimv2\TerminalServices PATH Win32_TSGeneralSetting Set SSLCertificateSHA1Hash="$tp"
+      $proc = Start-Process @wmic_tmpl
+      if ($proc.ExitCode -eq 0) { Write-Output "Success Associating cert with Thumbprint $tp to RDP Service" }
+      else { Write-Output "Fail! Exit code: $($Proc.ExitCode)" }
+    }
     # WinRM Service
     # https://stackoverflow.com/questions/74178953/winrm-configuration-on-https-port
     # The PS 5 (?) address "winrm/config/Listener" causes problems
-    if ($cfg.winrm) {
-    $selset = @{ Address = "*"; Transport = "HTTPS";}
-    $valset = @{CertificateThumbprint = "$thumbprint";}
-    # Need(?)
+    # https://learn.microsoft.com/en-us/powershell/module/microsoft.wsman.management/new-wsmaninstance?view=powershell-7.4
+    if ($c.winrm) {
+    $selset = @{ Transport = "HTTPS"; Address = "*"; }
+    # Opt(val): Hostname="HOST";
+    $valset = @{ CertificateThumbprint = "$tp"; }
+    # Need to rm listener before assoc'ing cert. Should disable HTTP (permanently) ?
     Get-ChildItem -Path WSMan:\localhost\Listener | Where-Object { $_.Keys -contains "Transport=HTTPS" } | Remove-Item -Recurse -Force
     # Listener* ?
     # Remove-Item -Path WSMan:\localhost\Listener -Recurse -Force
     # Need try{..} catch{..} ?
-    New-WSManInstance -ResourceURI "winrm/config/Listener" -SelectorSet $selset -ValueSet $valset
+    # PS7: Do not use: -ResourceURI
+    # Note: -Authentication here (Basic,Default(wsman,default), Digest, Kerberos, Negotiate, CredSSP, ClientCertificate) may matter to e.g. ansible.
+    # Enable-PSRemoting does not need to be required
+    # PS 7.3 manual (but get error about URL notation, Note: per example Hostname = $SubjectName ... given to New-LegacySelfSignedCert -SubjectName ... where
+    # [string]$SubjectName = $env:COMPUTERNAME,):
+    # New-WSManInstance winrm/config/Listener -SelectorSet @{Transport='HTTPS'; Address='*'} -ValueSet @{Hostname="HOST";CertificateThumbprint="XXXXXXXXXX"}
+    #$winrm_tmpl.ArgumentList[2] = "@{CertificateThumbprint=""$tp""}" # winrm version requires PS param (!)
+    # To work PS7 version of New-WSManInstance requires repeating selectorset in 2 forms (!, see below)
+    New-WSManInstance "winrm/config/Listener?Address=*+Transport=HTTPS" -SelectorSet $selset -ValueSet $valset
     Get-ChildItem -Path WSMan:\localhost\Listener | Where-Object { $_.Keys -contains "Transport=HTTPS" }
     # This might terminate remote runner like ansible (!)
     Write-Output "Please run 'Restart-Service WinRM' (and optional Start-Sleep -s 25) to make new WinRM Cert effective"
+    # Way to verify: winrm enumerate winrm/config/Listener (shows tp associated w. winrm service). Also see: winrm get winrm/config
     }
   }
 }
@@ -262,13 +277,64 @@ function gp_apply {
   }
   & gpupdate.exe /force
 }
+# Find files and apply an action to them.
+# Parameters:
+# - paths - One or more paths under which the find operations are ran
+# - patt - filename pattern on files to match during find
+# - act - action label (See options below)
+# Supported actions (values of "act": "...") are:
+# - print - Print name
+# - rm - Remove
+function findact {
+  if (!$cfg.findact) { Write-Output "Skipping find / action tasks (None present)"; return }
+  $arr = $cfg.findact
+  foreach ($i in $arr) {
+    $paths = $i.paths
+    $patt  = $i.patt # E.g. *.junk
+    $act   = $i.act
+    if ($i.disa) { Write-Output "Find by pattern '$patt' disabled (skip...)"; continue }
+    Write-Output "Find files in paths $paths by pattern '$patt' for action $act"
+    foreach ($path in $paths) {
+      # Stage 1: Find (To test in shell use: | ConvertTo-Json | more . Also params: -Depth N, -Include, -Exclude
+      # Write-Output "Get-ChildItem -Path $path -Filter ""$patt"" -Recurse -ErrorAction SilentlyContinue -Force"
+      # -Depth 30
+      $items = Get-ChildItem -Path $path -Filter "$patt" -Recurse -ErrorAction SilentlyContinue -Force # | ConvertTo-Json 
+      #return
+      # Stage 2: 
+      # https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/remove-item?view=powershell-7.4
+      foreach ($i in $items) {
 
+        if     ($act -eq "rm")    { Remove-Item -Path $i.FullName } # Also -Force
+        elseif ($act -eq "print") { Write-Output $i.FullName } # ToString()
+        else { Write-Output "Action '$act' not supported" }
+      }
+    }
+  }
+}
+# Uninstall Windows Feature or Application Package
+function uninst {
+  if (!$cfg.uninst) { Write-Output "Skipping uninstalls (None present)"; return }
+  foreach ($i in $cfg.uninst) {
+    $name = $i.name # name for the one of many types supported
+    #if ($i.type == 'feature') { Uninstall-WindowsFeature -Name $name }
+    # Note -FeatureName (except.)
+    # Also both -PackageName -FeatureName
+    #elseif ($i.type == 'optfeature') { Disable-WindowsOptionalFeature -Online -FeatureName $name }
+    #elseif ($i.type == 'capability') { Remove-WindowsCapability -Name $name }
+    #elseif ($i.type == 'app') { Remove-App -Identity $name }
+    # Remove .msix or .appx packages (See also: -AllUsers)
+    #elseif ($i.type == 'apppkg') { Remove-AppxProvisionedPackage -PackageName $name }
+    # Remove-AppxPackage -Package '$name'
+    #else { Write-Output "Uninstall for Type $($i.type) not supported" }
+  }
+}
 # Run the default operational sequence. This is someting that probably works
 # 90(+)% of the time, but you may need to establish a sequence of your own
 # (reorder/skip some). TODO: Make running this optional to use winsetup.p1 as
 # library (not only main executable).
 $cwd_orig = Get-location
 if ($cfg.workdir) { Set-Location $cfg.workdir }
+Write-Output "Running Powershell $($PSVersionTable.PSVersion)"
 serv_set
 user_setup
 tls_ciph_mod
@@ -282,5 +348,7 @@ ops_run
 sys_unhide
 gp_apply
 cert_setup
+findact
+uninst
 Set-Location $cwd_orig
 Exit
