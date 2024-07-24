@@ -181,12 +181,15 @@ function sys_unhide {
   # Stop-Process -processname explorer
 }
 # Import and/or associate cert with services (RDP, WinRM)
-# - pfxfn - for -FilePath
+# Parameters for "import to Windows Certificate Store" step / node
+# - pfxfn - for -FilePath (Should be only used in import step)
 # - csl - CertStoreLocation for import-op ( typical: 'Cert:\LocalMachine\My' )
-# - pass - password of PFX Private key
-# - tp - Expected SHA1 hash thumbprint of PFX certificate (for verification)
-# - rdp - Associate cert with RDP service
-# - winrm - Associate cert with WinRM service
+# - pass - password of PFX Private key (Should be only used in import step)
+# - tp - Expected SHA1 hash thumbprint of PFX certificate (for verification or association)
+# Parameters for rdp/einrm association step
+# - rdp - Associate cert with RDP service (Use in rdp assoc step only)
+# - winrm - Associate cert with WinRM service (Use in winrm assoc. step only)
+# - tp - Thummbprint of Certificate to associate with (rdp or winrom) service
 # path (e.g.): RDP: /namespace:\\root\\cimv2\\TerminalServices,
 function cert_setup {
   if (!$cfg.certs) { Write-Output "Skipping certs setup ..."; return }
@@ -208,6 +211,7 @@ function cert_setup {
     }
     # Check need to associate (wmic)
     if ($c.rdp) {
+      $tp = $c.tp
       $wmic_tmpl.ArgumentList[4] = "SSLCertificateSHA1Hash='$tp'"
       # Effectively: wmic /namespace:\\root\cimv2\TerminalServices PATH Win32_TSGeneralSetting Set SSLCertificateSHA1Hash="$tp"
       $proc = Start-Process @wmic_tmpl
@@ -303,29 +307,36 @@ function findact {
       # Stage 2: 
       # https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/remove-item?view=powershell-7.4
       foreach ($i in $items) {
-
-        if     ($act -eq "rm")    { Remove-Item -Path $i.FullName } # Also -Force
+        $ok = ""
+        if     ($act -eq "rm")    {
+          Remove-Item -Path $i.FullName -ErrorVariable ok -ErrorAction SilentlyContinue;
+          if (!$ok) { $ok = "Deletion OK" }
+          Write-Output "Ran deletion on $($i.FullName): message=$ok"
+        } # Also -Force
         elseif ($act -eq "print") { Write-Output $i.FullName } # ToString()
         else { Write-Output "Action '$act' not supported" }
       }
     }
   }
 }
-# Uninstall Windows Feature or Application Package
+# Uninstall Windows Feature or Application Package or ...
+# Note: Only $type feature properly tested (TODO: test others, commands should be right)
 function uninst {
   if (!$cfg.uninst) { Write-Output "Skipping uninstalls (None present)"; return }
   foreach ($i in $cfg.uninst) {
     $name = $i.name # name for the one of many types supported
-    #if ($i.type == 'feature') { Uninstall-WindowsFeature -Name $name }
+    $type = $i.type
+    if ($i.disa) { Write-Output "Skip uninstall of '$name'"; continue }
+    if ($type -eq 'feature')        { Uninstall-WindowsFeature -Name $name }
     # Note -FeatureName (except.)
     # Also both -PackageName -FeatureName
-    #elseif ($i.type == 'optfeature') { Disable-WindowsOptionalFeature -Online -FeatureName $name }
-    #elseif ($i.type == 'capability') { Remove-WindowsCapability -Name $name }
-    #elseif ($i.type == 'app') { Remove-App -Identity $name }
+    elseif ($type -eq 'optfeature') { Disable-WindowsOptionalFeature -Online -FeatureName $name }
+    elseif ($type -eq 'capability') { Remove-WindowsCapability -Name $name }
+    elseif ($type -eq 'app')        { Remove-App -Identity $name }
     # Remove .msix or .appx packages (See also: -AllUsers)
-    #elseif ($i.type == 'apppkg') { Remove-AppxProvisionedPackage -PackageName $name }
+    elseif ($type -eq 'apppkg')     { Remove-AppxProvisionedPackage -PackageName $name }
     # Remove-AppxPackage -Package '$name'
-    #else { Write-Output "Uninstall for Type $($i.type) not supported" }
+    else { Write-Output "Uninstall for component type '$type' not supported" }
   }
 }
 # Run the default operational sequence. This is someting that probably works
